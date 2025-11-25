@@ -65,6 +65,7 @@ module.exports = {
     background: './src/background/index.ts',
     'glow-animation': './src/content/glow-animation.ts',
     'teach-mode-recorder': './src/content/teach-mode-recorder.ts',
+    'prompt-toast': './src/content/prompt-toast.ts',
     newtab: './src/newtab/index.tsx',
     options: './src/options/index.tsx',
     onboarding: './src/onboarding/index.tsx'
@@ -147,7 +148,7 @@ module.exports = {
     // Limit chunks to entry points only - prevents dynamic chunk creation
     // This forces all imports (including dynamic) to be bundled into their parent entry
     new webpack.optimize.LimitChunkCountPlugin({
-      maxChunks: 7  // One chunk per entry point (sidepanel, background, glow-animation, teach-mode-recorder, newtab, options, onboarding)
+      maxChunks: 8  // One chunk per entry point (sidepanel, background, glow-animation, teach-mode-recorder, prompt-toast, newtab, options, onboarding)
     }),
     new HtmlWebpackPlugin({
       template: './src/sidepanel/index.html',

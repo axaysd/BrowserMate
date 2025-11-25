@@ -50,6 +50,17 @@
   }
 }
 
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
+}
+
 /* Smooth transitions for interactive elements */
 .smooth-hover {
   transition: all 0.15s cubic-bezier(0.4, 0.0, 0.2, 1);

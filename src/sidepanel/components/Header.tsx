@@ -1,4 +1,4 @@
-import React, { memo, useState } from 'react'
+import React, { memo, useState, useEffect } from 'react'
 import { Button } from '@/sidepanel/components/ui/button'
 import { useSidePanelPortMessaging } from '@/sidepanel/hooks'
 import { MessageType } from '@/lib/types/messaging'
@@ -8,7 +8,6 @@ import { HelpSection } from './HelpSection'
 // import { ExperimentModal } from './ExperimentModal'  // Removed - old evals system deprecated
 import { HelpCircle, Settings, Pause, RotateCcw, ChevronDown, Plus, Trash2, Star, Copy } from 'lucide-react'
 import { useSettingsStore } from '@/sidepanel/stores/settingsStore'
-import { useEffect } from 'react'
 import { z } from 'zod'
 import { BrowserOSProvidersConfig, BrowserOSProvidersConfigSchema } from '@/lib/llm/settings/types'
 import { MCP_SERVERS, type MCPServerConfig } from '@/config/mcpServers'

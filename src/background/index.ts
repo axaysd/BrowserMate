@@ -15,6 +15,7 @@ import { MCPHandler } from './handlers/MCPHandler'
 import { PlanHandler } from './handlers/PlanHandler'
 import { SettingsHandler } from './handlers/SettingsHandler'
 import { TeachModeHandler } from './handlers/TeachModeHandler'
+import { PromptToastService } from '@/lib/services/PromptToastService'
 
 /**
  * Background script for the Nxtscape extension
@@ -343,6 +344,8 @@ async function toggleSidePanel(tabId: number): Promise<void> {
       isPanelOpen = true
       Logging.log('Background', 'Panel toggled on')
       Logging.logMetric('side_panel_toggled')
+      // Hide prompt buttons when panel opens
+      PromptToastService.getInstance().hideButtons(tabId)
     }
   } catch (error) {
     Logging.log('Background', `Error toggling side panel: ${error}`, 'error')
@@ -426,13 +429,88 @@ function initialize(): void {
   chrome.tabs.onRemoved.addListener(async (tabId) => {
     // With singleton execution, just log the tab removal
     Logging.log('Background', `Tab ${tabId} removed`)
+    // Clean up prompt toast service
+    PromptToastService.getInstance().handleTabClosed(tabId)
   })
   
-  // Handle messages from newtab only
+  // Initialize prompt toast service
+  PromptToastService.getInstance()
+  
+  // Handle messages from newtab and sidepanel
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'NEWTAB_EXECUTE_QUERY') {
       executionHandler.handleNewtabQuery(message, sendResponse)
       return true  // Keep message channel open for async response
+    }
+    
+    if (message.type === 'HIDE_PROMPT_TOAST') {
+      // Hide buttons on active tab when side panel opens
+      PromptToastService.getInstance().hideButtonsOnActiveTab()
+      sendResponse({ success: true })
+      return true
+    }
+    
+    if (message.type === 'FILL_PROMPT_INPUT') {
+      // Open side panel in agent mode and fill input with prompt
+      const prompt = (message as any).prompt
+      if (prompt) {
+        // First, set app mode to 'agent' in settings
+        chrome.storage.local.get('nxtscape-settings', (result) => {
+          let settings = { state: { appMode: 'agent' } }
+          if (result && result['nxtscape-settings']) {
+            try {
+              const parsed = JSON.parse(result['nxtscape-settings'])
+              settings = {
+                state: {
+                  ...(parsed.state || parsed),
+                  appMode: 'agent'
+                }
+              }
+            } catch {
+              // Use default if parsing fails
+            }
+          }
+          
+          // Update settings to agent mode
+          chrome.storage.local.set({
+            'nxtscape-settings': JSON.stringify(settings),
+            'pendingPrompt': prompt,
+            'switchToAgentMode': true // Flag to trigger mode switch in side panel
+          }).then(() => {
+            // Get current active tab
+            chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+              if (tabs[0]?.id) {
+                const tabId = tabs[0].id
+                
+                // Open side panel if not already open
+                if (!isPanelOpen) {
+                  toggleSidePanel(tabId).then(() => {
+                    // Also try sending message directly (backup)
+                    setTimeout(() => {
+                      chrome.runtime.sendMessage({
+                        type: 'FILL_PROMPT_INPUT',
+                        prompt: prompt
+                      }).catch(() => {
+                        // That's okay, side panel will check storage
+                      })
+                    }, 500)
+                  })
+                } else {
+                  // Side panel is already open, send message immediately
+                  chrome.runtime.sendMessage({
+                    type: 'FILL_PROMPT_INPUT',
+                    prompt: prompt
+                  }).catch(() => {
+                    // That's okay, side panel will check storage
+                  })
+                }
+              }
+            })
+          })
+        })
+      }
+      sendResponse({ success: true })
+      return true
     }
   })
   

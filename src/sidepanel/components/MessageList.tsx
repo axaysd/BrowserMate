@@ -20,6 +20,7 @@ import { MessageType } from '@/lib/types/messaging'
 import { useChatStore } from '@/sidepanel/stores/chatStore'
 import { useSettingsStore } from '@/sidepanel/stores/settingsStore'
 import { useTabsStore } from '@/sidepanel/stores/tabsStore'
+import { getSuggestivePrompts } from '../utils/suggestivePrompts'
 
 interface MessageListProps {
   messages: Message[]
@@ -54,12 +55,36 @@ export function MessageList({ messages, isProcessing = false, onScrollStateChang
   const { trackFeature } = useAnalytics()
   const { sendMessage } = useSidePanelPortMessaging()
   const { upsertMessage, setProcessing } = useChatStore()
-  const { chatMode } = useSettingsStore()
-  const { getContextTabs, clearSelectedTabs } = useTabsStore()
+  const { chatMode, appMode } = useSettingsStore()
+  const { getContextTabs, clearSelectedTabs, currentTabId, openTabs } = useTabsStore()
   const [, setIsAtBottom] = useState(true)
-  const currentExamples = useMemo<string[]>(() => (chatMode ? CHAT_EXAMPLES : AGENT_EXAMPLES), [chatMode])
   const [isAnimating] = useState(false)
   const [displayCount] = useState(DEFAULT_DISPLAY_COUNT)
+  
+  // Get current tab URL
+  const currentTabUrl = useMemo<string | null>(() => {
+    if (currentTabId === null) return null
+    const currentTab = openTabs.find(tab => tab.id === currentTabId)
+    return currentTab?.url || null
+  }, [currentTabId, openTabs])
+  
+  // Get page-based prompts for current URL (only in Agent Mode)
+  const pageBasedPrompts = useMemo<string[]>(() => {
+    if (appMode !== 'agent' || !currentTabUrl) return []
+    return getSuggestivePrompts(currentTabUrl)
+  }, [appMode, currentTabUrl])
+  
+  // Determine which examples to show
+  const currentExamples = useMemo<string[]>(() => {
+    if (chatMode) {
+      return CHAT_EXAMPLES
+    }
+    // In Agent Mode, use page-based prompts if available, otherwise fallback to default
+    if (appMode === 'agent' && pageBasedPrompts.length > 0) {
+      return pageBasedPrompts
+    }
+    return AGENT_EXAMPLES
+  }, [chatMode, appMode, pageBasedPrompts])
   
   // Track previously seen message IDs to determine which are new
   const previousMessageIdsRef = useRef<Set<string>>(new Set())
@@ -68,7 +93,6 @@ export function MessageList({ messages, isProcessing = false, onScrollStateChang
   // Use external container ref if provided, otherwise use internal one
   const containerRef = externalContainerRef || internalContainerRef
   
-
   // Track new messages for animation 
   useEffect(() => {
     const currentMessageIds = new Set(messages.map(msg => msg.msgId))

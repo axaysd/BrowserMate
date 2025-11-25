@@ -66,6 +66,7 @@ import { GlowAnimationService } from '@/lib/services/GlowAnimationService';
 import { TokenCounter } from "../utils/TokenCounter";
 import { wrapToolForMetrics } from '@/evals2/EvalToolWrapper';
 import { ENABLE_EVALS2 } from '@/config';
+import { getPredefinedTaskMetadata } from '@/lib/utils/predefinedPrompts';
 
 // Constants
 const MAX_PLANNER_ITERATIONS = 50;
@@ -273,52 +274,8 @@ export class LocalAgent {
    * @returns Metadata with predefined plan or null if not a special task
    */
   private _getSpecialTaskMetadata(task: string): {task: string, metadata: ExecutionMetadata} | null {
-    // Case-insensitive comparison
-    const taskLower = task.toLowerCase();
-
-    // BrowserOS Launch Upvote Task
-    if (taskLower === "read about our vision and upvote ❤️") {
-      return {
-        task: "Read about our vision and upvote",
-        metadata: {
-          executionMode: 'predefined' as const,
-          predefinedPlan: {
-            agentId: 'browseros-launch-upvoter',
-            name: "BrowserOS Launch Upvoter",
-            goal: "Navigate to BrowserOS launch page and upvote it",
-            steps: [
-              "Navigate to https://dub.sh/browseros-launch",
-              "Find and click the upvote button on the page using visual_click",
-              "Use celebration tool to show confetti animation"
-            ]
-          }
-        }
-      };
-    }
-
-    // GitHub Star Task
-    if (taskLower === "support browseros on github ⭐") {
-      return {
-        task: "Support BrowserOS on GitHub",
-        metadata: {
-          executionMode: 'predefined' as const,
-          predefinedPlan: {
-            agentId: 'github-star-browseros',
-            name: "GitHub Repository Star",
-            goal: "Navigate to BrowserOS GitHub repo and star it",
-            steps: [
-              "Navigate to https://git.new/browserOS",
-              "Check if the star button indicates already starred (filled star icon)",
-              "If not starred (outline star icon), click the star button to star the repository",
-              "Use celebration_tool to show confetti animation"
-            ]
-          }
-        }
-      };
-    }
-
-    // Return null if not a special task
-    return null;
+    // Use shared registry instead of hardcoded checks
+    return getPredefinedTaskMetadata(task)
   }
 
   // There are basically two modes of operation:

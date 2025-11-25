@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useMessageHandler } from './hooks/useMessageHandler'
 import { useSidePanelPortMessaging } from '@/sidepanel/hooks'
 import { Chat } from './components/Chat'
@@ -25,7 +25,7 @@ export function App() {
   const { humanInputRequest, clearHumanInputRequest } = useMessageHandler()
 
   // Initialize settings
-  const { fontSize, theme, appMode } = useSettingsStore()
+  const { fontSize, theme, appMode, setAppMode } = useSettingsStore()
 
   // Get chat state for header
   const { messages, isProcessing, reset } = useChatStore()
@@ -38,6 +38,9 @@ export function App() {
 
   // Check if any execution is running (chat or teach mode)
   const isExecuting = isProcessing || teachModeState === 'executing'
+  
+  // State to track pending prompt (for mode switching)
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
   
   // Initialize global announcer for screen readers
   const announcer = useAnnouncer()
@@ -57,6 +60,94 @@ export function App() {
     if (theme === 'dark') root.classList.add('dark')
     if (theme === 'gray') root.classList.add('gray')
   }, [fontSize, theme])
+  
+  // Hide prompt buttons when side panel opens
+  useEffect(() => {
+    chrome.runtime.sendMessage({
+      type: 'HIDE_PROMPT_TOAST'
+    }).catch(() => {
+      // Ignore errors - background script might not be ready
+    })
+  }, []) // Run once on mount
+  
+  // Function to fill input and highlight submit button
+  const fillInputAndHighlight = useCallback((prompt: string) => {
+    // Dispatch event to fill input
+    window.dispatchEvent(new CustomEvent('setInputValue', {
+      detail: prompt
+    }))
+    
+    // Highlight submit button
+    setTimeout(() => {
+      const submitButton = document.querySelector('button[type="submit"]') as HTMLElement
+      if (submitButton) {
+        submitButton.style.animation = 'none'
+        submitButton.offsetHeight // Trigger reflow
+        submitButton.style.animation = 'pulse 1s ease-in-out 3'
+        submitButton.style.boxShadow = '0 0 20px rgba(251, 102, 24, 0.6)'
+        
+        // Remove highlight after animation
+        setTimeout(() => {
+          submitButton.style.boxShadow = ''
+          submitButton.style.animation = ''
+        }, 3000)
+      }
+    }, 100)
+    
+    // Clear the pending prompt from storage
+    chrome.storage.local.remove('pendingPrompt')
+  }, [])
+  
+  // Listen for prompt input fill messages
+  useEffect(() => {
+    const handleMessage = (message: any) => {
+      if (message.type === 'FILL_PROMPT_INPUT' && message.prompt) {
+        // If we're not in agent mode, switch first and store the prompt
+        if (appMode !== 'agent') {
+          setAppMode('agent')
+          setPendingPrompt(message.prompt)
+        } else {
+          // Already in agent mode, fill immediately
+          fillInputAndHighlight(message.prompt)
+        }
+      }
+    }
+    
+    chrome.runtime.onMessage.addListener(handleMessage)
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleMessage)
+    }
+  }, [fillInputAndHighlight, appMode, setAppMode])
+  
+  // Check for pending prompt and mode switch flag on mount
+  useEffect(() => {
+    chrome.storage.local.get(['pendingPrompt', 'switchToAgentMode'], (result) => {
+      // Switch to agent mode if flag is set
+      if (result.switchToAgentMode) {
+        setAppMode('agent')
+        chrome.storage.local.remove('switchToAgentMode')
+      }
+      
+      // Store pending prompt in state (don't fill yet - wait for mode switch)
+      if (result.pendingPrompt) {
+        setPendingPrompt(result.pendingPrompt)
+        chrome.storage.local.remove('pendingPrompt')
+      }
+    })
+  }, [setAppMode])
+  
+  // Fill input when we're in agent mode and have a pending prompt
+  useEffect(() => {
+    if (appMode === 'agent' && pendingPrompt) {
+      // Wait a bit for Chat component to render and ChatInput to be ready
+      const timer = setTimeout(() => {
+        fillInputAndHighlight(pendingPrompt)
+        setPendingPrompt(null)
+      }, 300)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [appMode, pendingPrompt, fillInputAndHighlight])
 
   // Listen for theme changes from other tabs/views
   useEffect(() => {

@@ -35,22 +35,38 @@ const initialState: Settings = {
   appMode: 'agent'
 }
 
+// Sync settings to chrome.storage.local for content scripts to access
+function syncToChromeStorage(state: Settings): void {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      chrome.storage.local.set({
+        'nxtscape-settings': JSON.stringify({ state })
+      })
+    }
+  } catch (error) {
+    // Silently fail - content scripts will use default
+    console.warn('Failed to sync settings to chrome.storage:', error)
+  }
+}
+
 // Create the store with persistence
 export const useSettingsStore = create<Settings & SettingsActions>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // State
       ...initialState,
       
       // Actions
       setFontSize: (size) => {
         set({ fontSize: size })
+        syncToChromeStorage(get())
         // Apply font size to document
         document.documentElement.style.setProperty('--app-font-size', `${size}px`)
       },
       
       setTheme: (theme) => {
         set({ theme })
+        syncToChromeStorage(get())
         // Apply theme classes to document
         const root = document.documentElement
         root.classList.remove('dark')
@@ -61,14 +77,17 @@ export const useSettingsStore = create<Settings & SettingsActions>()(
       
       setAutoScroll: (enabled) => {
         set({ autoScroll: enabled })
+        syncToChromeStorage(get())
       },
       
       setAutoCollapseTools: (enabled) => {
         set({ autoCollapseTools: enabled })
+        syncToChromeStorage(get())
       },
       
       setChatMode: (enabled) => {
         set({ chatMode: enabled })
+        syncToChromeStorage(get())
       },
 
       setAppMode: (mode) => {
@@ -77,10 +96,12 @@ export const useSettingsStore = create<Settings & SettingsActions>()(
           // Update legacy chatMode for backwards compatibility
           chatMode: mode === 'chat'
         })
+        syncToChromeStorage(get())
       },
 
       resetSettings: () => {
         set(initialState)
+        syncToChromeStorage(initialState)
         // Reset document styles
         document.documentElement.style.removeProperty('--app-font-size')
         document.documentElement.classList.remove('dark')
@@ -90,6 +111,12 @@ export const useSettingsStore = create<Settings & SettingsActions>()(
     {
       name: 'nxtscape-settings',  // localStorage key
       version: 5,
+      onRehydrateStorage: () => (state) => {
+        // Sync to chrome.storage after rehydration
+        if (state) {
+          syncToChromeStorage(state)
+        }
+      },
       migrate: (persisted: any, version: number) => {
         // Migrate from v1 isDarkMode -> theme
         if (version === 1 && persisted) {
